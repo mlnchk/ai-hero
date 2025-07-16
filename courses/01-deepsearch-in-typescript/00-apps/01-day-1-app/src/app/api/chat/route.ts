@@ -4,6 +4,11 @@ import { model } from "~/models";
 import { auth } from "~/server/auth";
 import { searchSerper } from "../../../serper";
 import { z } from "zod";
+import { db } from "~/server/db";
+import { users, userRequests } from "~/server/db/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { checkAndRecordRateLimit } from "~/utils";
 
 export const maxDuration = 60;
 
@@ -11,6 +16,28 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });
+  }
+
+  // Fetch user from DB to check isAdmin
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, session.user.id));
+  if (!user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  try {
+    await checkAndRecordRateLimit({
+      db,
+      userId: user.id,
+      isAdmin: user.isAdmin,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "RATE_LIMIT_EXCEEDED") {
+      return new Response("Too Many Requests", { status: 429 });
+    }
+    throw err;
   }
 
   const body = (await request.json()) as {
