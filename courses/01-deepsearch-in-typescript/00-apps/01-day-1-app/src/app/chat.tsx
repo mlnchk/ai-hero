@@ -5,15 +5,42 @@ import { SignInModal } from "~/components/sign-in-modal";
 import { useChat } from "@ai-sdk/react";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isNewChatCreated } from "~/utils";
+import type { Message } from "ai";
+import { StickToBottom } from "use-stick-to-bottom";
 
 interface ChatProps {
   userName: string;
+  chatId?: string;
+  initialMessages?: Message[];
 }
 
-export const ChatPage = ({ userName }: ChatProps) => {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error } =
-    useChat();
+export const ChatPage = ({ userName, chatId, initialMessages }: ChatProps) => {
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    error,
+    data,
+  } = useChat({
+    body: {
+      chatId,
+    },
+    initialMessages,
+  });
   const [showSignIn, setShowSignIn] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const lastDataItem = data?.[data.length - 1];
+
+    if (lastDataItem && isNewChatCreated(lastDataItem)) {
+      router.push(`?id=${lastDataItem.chatId}`);
+    }
+  }, [data, router]);
 
   useEffect(() => {
     if (
@@ -34,27 +61,31 @@ export const ChatPage = ({ userName }: ChatProps) => {
   return (
     <>
       <div className="flex flex-1 flex-col">
-        <div
-          className="mx-auto w-full max-w-[65ch] flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500"
+        <StickToBottom
+          className="mx-auto w-full max-w-[65ch] flex-1 overflow-y-auto p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500"
+          resize="smooth"
+          initial="smooth"
           role="log"
           aria-label="Chat messages"
         >
-          {messages.map((message, index) => {
-            return (
-              <ChatMessage
-                key={index}
-                parts={message.parts}
-                role={message.role}
-                userName={userName}
-              />
-            );
-          })}
-          {isLoading && (
-            <div className="flex justify-center py-4">
-              <Loader2 className="size-6 animate-spin text-gray-400" />
-            </div>
-          )}
-        </div>
+          <StickToBottom.Content className="flex flex-col gap-4">
+            {messages.map((message, index) => {
+              return (
+                <ChatMessage
+                  key={index}
+                  parts={message.parts}
+                  role={message.role}
+                  userName={userName}
+                />
+              );
+            })}
+            {isLoading && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="size-6 animate-spin text-gray-400" />
+              </div>
+            )}
+          </StickToBottom.Content>
+        </StickToBottom>
 
         <div className="border-t border-gray-700">
           <form onSubmit={handleSubmit} className="mx-auto max-w-[65ch] p-4">

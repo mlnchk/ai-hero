@@ -1,14 +1,18 @@
 import type { Message } from "ai";
-import { streamText, createDataStreamResponse } from "ai";
+import {
+  streamText,
+  createDataStreamResponse,
+  appendResponseMessages,
+} from "ai";
 import { model } from "~/models";
 import { auth } from "~/server/auth";
 import { searchSerper } from "../../../serper";
 import { z } from "zod";
 import { db } from "~/server/db";
-import { users, userRequests } from "~/server/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { users } from "~/server/db/schema";
+import { eq } from "drizzle-orm";
 import { checkAndRecordRateLimit } from "~/utils";
+import { upsertChat } from "~/server/db/queries";
 
 export const maxDuration = 60;
 
@@ -40,13 +44,35 @@ export async function POST(request: Request) {
     throw err;
   }
 
-  const body = (await request.json()) as {
-    messages: Array<Message>;
-  };
+  const { messages, chatId }: { messages: Message[]; chatId?: string } =
+    await request.json();
+
+  // Generate a chat ID if not provided
+  const finalChatId = chatId ?? crypto.randomUUID();
+
+  // Create a title from the first user message
+  const firstUserMessage = messages.find((msg) => msg.role === "user");
+  const title = firstUserMessage?.content?.slice(0, 100) ?? "New Chat";
+
+  // Create the chat before starting the stream to protect against broken streams
+  if (!chatId) {
+    await upsertChat({
+      userId: user.id,
+      chatId: finalChatId,
+      title,
+      messages: messages,
+    });
+  }
 
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
-      const { messages } = body;
+      // Send the new chat ID if this is a new chat
+      if (!chatId) {
+        dataStream.writeData({
+          type: "NEW_CHAT_CREATED",
+          chatId: finalChatId,
+        });
+      }
 
       const result = streamText({
         model,
@@ -71,6 +97,29 @@ export async function POST(request: Request) {
           },
         },
         maxSteps: 10,
+        onFinish({
+          text: _text,
+          finishReason: _finishReason,
+          usage: _usage,
+          response,
+        }) {
+          const responseMessages = response.messages;
+
+          const updatedMessages = appendResponseMessages({
+            messages, // from the POST body
+            responseMessages,
+          });
+
+          // Save the updated messages to the database
+          upsertChat({
+            userId: user.id,
+            chatId: finalChatId,
+            title,
+            messages: updatedMessages,
+          }).catch((error) => {
+            console.error("Failed to save chat:", error);
+          });
+        },
       });
 
       result.mergeIntoDataStream(dataStream);
