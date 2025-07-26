@@ -88,7 +88,11 @@ export async function POST(request: Request) {
             langfuseTraceId: trace.id,
           },
         },
-        system: `You are a helpful AI assistant with access to real-time web search capabilities and web scraping tools. When answering questions:
+        system: `You are a helpful AI assistant with access to real-time web search capabilities and web scraping tools.
+
+CURRENT DATE AND TIME: ${new Date().toISOString()}
+
+When answering questions:
 
 1. Always search the web for up-to-date information when relevant
 2. ALWAYS format URLs as markdown links using the format [title](url)
@@ -102,6 +106,8 @@ export async function POST(request: Request) {
 10. The scrapePages tool is essential for getting detailed, accurate information beyond search snippets
 11. When researching topics, scrape from different types of sources: news sites, academic sources, industry blogs, official documentation, etc.
 12. Your workflow should always be: search → find relevant URLs → scrape full content → synthesize information from multiple sources
+13. When users ask for "up to date" information, "latest" news, or "current" events, use the current date and time to provide context about how recent the information is
+14. Always consider the publication dates of sources when determining if information is current and relevant
 
 Remember: ALWAYS scrape websites to get full information. Never rely on search snippets alone. Use searchWeb to find relevant pages, then ALWAYS use scrapePages to extract detailed content from 4-6 diverse sources for comprehensive answers.`,
         tools: {
@@ -119,6 +125,7 @@ Remember: ALWAYS scrape websites to get full information. Never rely on search s
                 title: result.title,
                 link: result.link,
                 snippet: result.snippet,
+                date: result.date,
               }));
             },
           },
