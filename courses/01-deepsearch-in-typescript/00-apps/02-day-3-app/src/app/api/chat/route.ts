@@ -7,6 +7,7 @@ import {
 import { model } from "~/model";
 import { auth } from "~/server/auth";
 import { searchSerper } from "~/serper";
+import { bulkCrawlWebsites } from "~/scraper";
 import { z } from "zod";
 import { upsertChat } from "~/server/db/queries";
 import { eq } from "drizzle-orm";
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
             langfuseTraceId: trace.id,
           },
         },
-        system: `You are a helpful AI assistant with access to real-time web search capabilities. When answering questions:
+        system: `You are a helpful AI assistant with access to real-time web search capabilities and web scraping tools. When answering questions:
 
 1. Always search the web for up-to-date information when relevant
 2. ALWAYS format URLs as markdown links using the format [title](url)
@@ -95,8 +96,14 @@ export async function POST(request: Request) {
 4. If you're unsure about something, search the web to verify
 5. When providing information, always include the source where you found it using markdown links
 6. Never include raw URLs - always use markdown link format
+7. ALWAYS use the scrapePages tool - never rely solely on search snippets, always scrape the full content of websites
+8. Use the scrapePages tool extensively to extract full content from web pages - scrape 4-6 URLs per query for comprehensive coverage
+9. Always use diverse sources - don't just scrape from one website, get information from multiple different sources and perspectives
+10. The scrapePages tool is essential for getting detailed, accurate information beyond search snippets
+11. When researching topics, scrape from different types of sources: news sites, academic sources, industry blogs, official documentation, etc.
+12. Your workflow should always be: search → find relevant URLs → scrape full content → synthesize information from multiple sources
 
-Remember to use the searchWeb tool whenever you need to find current information.`,
+Remember: ALWAYS scrape websites to get full information. Never rely on search snippets alone. Use searchWeb to find relevant pages, then ALWAYS use scrapePages to extract detailed content from 4-6 diverse sources for comprehensive answers.`,
         tools: {
           searchWeb: {
             parameters: z.object({
@@ -113,6 +120,40 @@ Remember to use the searchWeb tool whenever you need to find current information
                 link: result.link,
                 snippet: result.snippet,
               }));
+            },
+          },
+          scrapePages: {
+            parameters: z.object({
+              urls: z
+                .array(z.string())
+                .describe("Array of URLs to scrape for full content"),
+            }),
+            execute: async ({ urls }, { abortSignal }) => {
+              const result = await bulkCrawlWebsites({ urls });
+
+              if (!result.success) {
+                return {
+                  error: result.error,
+                  results: result.results.map((r) => ({
+                    url: r.url,
+                    success: r.result.success,
+                    error: r.result.success
+                      ? undefined
+                      : (r.result as any).error,
+                    content: r.result.success
+                      ? (r.result as any).data
+                      : undefined,
+                  })),
+                };
+              }
+
+              return {
+                success: true,
+                results: result.results.map((r) => ({
+                  url: r.url,
+                  content: r.result.data,
+                })),
+              };
             },
           },
         },
