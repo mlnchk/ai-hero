@@ -40,31 +40,101 @@ export async function POST(request: Request) {
     return new Response("No messages provided", { status: 400 });
   }
 
+  // Create trace at the beginning
+  const trace = langfuse.trace({
+    name: "chat",
+    userId: session.user.id,
+  });
+
   // If no chatId is provided, create a new chat with the user's message
   let currentChatId = chatId;
   if (!currentChatId) {
     const newChatId = crypto.randomUUID();
-    await upsertChat({
-      userId: session.user.id,
-      chatId: newChatId,
-      title: messages[messages.length - 1]!.content.slice(0, 50) + "...",
-      messages: messages, // Only save the user's message initially
+
+    const createChatSpan = trace.span({
+      name: "create-new-chat",
+      input: {
+        userId: session.user.id,
+        chatId: newChatId,
+        title: messages[messages.length - 1]!.content.slice(0, 50) + "...",
+        messages: messages,
+      },
     });
+
+    try {
+      await upsertChat({
+        userId: session.user.id,
+        chatId: newChatId,
+        title: messages[messages.length - 1]!.content.slice(0, 50) + "...",
+        messages: messages, // Only save the user's message initially
+      });
+
+      createChatSpan.end({
+        output: {
+          chatId: newChatId,
+          success: true,
+        },
+      });
+    } catch (error) {
+      createChatSpan.end({
+        output: {
+          error: error instanceof Error ? error.message : "Unknown error",
+          success: false,
+        },
+      });
+      throw error;
+    }
+
     currentChatId = newChatId;
   } else {
     // Verify the chat belongs to the user
-    const chat = await db.query.chats.findFirst({
-      where: eq(chats.id, currentChatId),
+    const verifyChatSpan = trace.span({
+      name: "verify-chat-ownership",
+      input: {
+        chatId: currentChatId,
+        userId: session.user.id,
+      },
     });
-    if (!chat || chat.userId !== session.user.id) {
-      return new Response("Chat not found or unauthorized", { status: 404 });
+
+    try {
+      const chat = await db.query.chats.findFirst({
+        where: eq(chats.id, currentChatId),
+      });
+
+      if (!chat || chat.userId !== session.user.id) {
+        verifyChatSpan.end({
+          output: {
+            found: false,
+            authorized: false,
+            success: false,
+          },
+        });
+        return new Response("Chat not found or unauthorized", { status: 404 });
+      }
+
+      verifyChatSpan.end({
+        output: {
+          found: true,
+          authorized: true,
+          chatId: chat.id,
+          userId: chat.userId,
+          success: true,
+        },
+      });
+    } catch (error) {
+      verifyChatSpan.end({
+        output: {
+          error: error instanceof Error ? error.message : "Unknown error",
+          success: false,
+        },
+      });
+      throw error;
     }
   }
 
-  const trace = langfuse.trace({
+  // Update trace with sessionId now that we have the chatId
+  trace.update({
     sessionId: currentChatId,
-    name: "chat",
-    userId: session.user.id,
   });
 
   return createDataStreamResponse({
@@ -177,12 +247,40 @@ Remember: ALWAYS scrape websites to get full information. Never rely on search s
           }
 
           // Save the complete chat history
-          await upsertChat({
-            userId: session.user.id,
-            chatId: currentChatId,
-            title: lastMessage.content.slice(0, 50) + "...",
-            messages: updatedMessages,
+          const saveChatSpan = trace.span({
+            name: "save-chat-history",
+            input: {
+              userId: session.user.id,
+              chatId: currentChatId,
+              title: lastMessage.content.slice(0, 50) + "...",
+              messageCount: updatedMessages.length,
+            },
           });
+
+          try {
+            await upsertChat({
+              userId: session.user.id,
+              chatId: currentChatId,
+              title: lastMessage.content.slice(0, 50) + "...",
+              messages: updatedMessages,
+            });
+
+            saveChatSpan.end({
+              output: {
+                chatId: currentChatId,
+                messageCount: updatedMessages.length,
+                success: true,
+              },
+            });
+          } catch (error) {
+            saveChatSpan.end({
+              output: {
+                error: error instanceof Error ? error.message : "Unknown error",
+                success: false,
+              },
+            });
+            throw error;
+          }
 
           await langfuse.flushAsync();
         },
