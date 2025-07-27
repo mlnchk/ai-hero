@@ -89,7 +89,9 @@ Remember to:
 export async function askDeepSearch(messages: Message[]) {
   const result = streamFromDeepSearch({
     messages,
-    onFinish: () => {}, // just a stub
+    onFinish: () => {
+      // Intentionally empty - no persistence needed for evals
+    },
     telemetry: {
       isEnabled: false,
     },
