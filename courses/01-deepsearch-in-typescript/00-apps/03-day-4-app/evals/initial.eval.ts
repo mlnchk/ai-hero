@@ -30,6 +30,33 @@ ESLint 9 Support: Added support for ESLint 9.
 Development and Build Performance: Improved build times and Faster Fast Refresh.
 `,
       },
+      {
+        input:
+          "What is the first-weekend domestic box office for 2025 comic book movies?",
+        expected: `
+In 2025 there were 3 comic book movies that were released:
+
+- Thunderbolts*. $74,300,608 in 4,330 theaters.
+- Superman. $125,021,735 in 4,135 theaters.
+- The Fantastic Four: First Steps. $117,644,828 in 4,125 theaters.
+`,
+      },
+      {
+        input: "In which movies did Pedro Pascal appear in 2025?",
+        expected: `
+Pedro Pascal appeared in the following movies in 2025:
+
+- Edgington
+- Materialists
+- The Fantastic Four: First Steps
+`,
+      },
+      {
+        input: "What is the overall review for the latest Dexter season?",
+        expected: `
+The lastest Dexter season which called Dexter: Resurrection received a rating of 9.2/10 on IMDb and 89% on Rotten Tomatoes.
+`,
+      },
     ];
   },
   task: async (input) => {
