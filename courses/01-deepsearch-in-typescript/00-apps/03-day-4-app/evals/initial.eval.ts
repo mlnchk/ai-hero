@@ -1,6 +1,7 @@
 import { evalite } from "evalite";
 import { askDeepSearch } from "~/deep-search";
 import { Factuality } from "~/factuality-scorer";
+import { AnswerRelevancy } from "~/answer-relevancy-scorer";
 import type { Message } from "ai";
 
 evalite("Deep Search Eval", {
@@ -83,5 +84,6 @@ The lastest Dexter season which called Dexter: Resurrection received a rating of
       },
     },
     Factuality,
+    AnswerRelevancy,
   ],
 });
