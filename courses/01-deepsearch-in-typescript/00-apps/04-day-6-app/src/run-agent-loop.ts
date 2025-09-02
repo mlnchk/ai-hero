@@ -2,6 +2,7 @@ import { searchSerper } from "~/serper";
 import { bulkCrawlWebsites } from "~/server/scraper";
 import { SystemContext, getNextAction } from "~/system-context";
 import { answerQuestion } from "~/answer-question";
+import type { StreamTextResult } from "ai";
 
 // Copy of the search function from deep-search.ts
 async function search(ctx: SystemContext, query: string) {
@@ -42,7 +43,9 @@ async function scrapeUrl(ctx: SystemContext, urls: string[]) {
   return scrapeResults;
 }
 
-export async function runAgentLoop(userQuestion: string): Promise<string> {
+export async function runAgentLoop(
+  userQuestion: string,
+): Promise<StreamTextResult<{}, string>> {
   // A persistent container for the state of our system
   const ctx = new SystemContext(userQuestion);
 

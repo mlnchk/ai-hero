@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { streamText, type StreamTextResult } from "ai";
 import { model } from "~/model";
 import { SystemContext } from "~/system-context";
 
@@ -6,10 +6,10 @@ interface AnswerOptions {
   isFinal?: boolean;
 }
 
-export async function answerQuestion(
+export function answerQuestion(
   ctx: SystemContext,
   options: AnswerOptions = {},
-): Promise<string> {
+): StreamTextResult<{}, string> {
   const { isFinal = false } = options;
 
   const systemPrompt = `You are a helpful AI assistant with access to real-time web search capabilities. The current date and time is ${new Date().toLocaleString()}.
@@ -36,10 +36,8 @@ User's question: ${ctx.getInitialQuestion()}
 
 Please provide a comprehensive answer based on the information above.`;
 
-  const result = await generateText({
+  return streamText({
     model,
     prompt: systemPrompt,
   });
-
-  return result.text;
 }
